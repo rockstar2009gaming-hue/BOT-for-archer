@@ -400,7 +400,7 @@ async def announce(ctx, channel: discord.TextChannel, *, message):
         color=0x2b2d31
     )
 
-    embed.set_author(name="📢 Announcement", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+    
 
     await channel.send(embed=embed)
 
