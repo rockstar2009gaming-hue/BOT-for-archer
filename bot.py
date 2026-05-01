@@ -114,7 +114,7 @@ class TicketModal(discord.ui.Modal, title="Middleman Request"):
         embed.add_field(name="Trade Value", value=self.value.value, inline=False)
         embed.add_field(name="Other User", value=other_display, inline=False)
 
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1493304360493519110/1498754688424739007/f846d17e-ce13-4707-aacd-4f5579cf20bc.png")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1499704965021700116/1499705524885913670/file_00000000371871f4b1400c668285ac002.png?ex=69f5c51c&is=69f4739c&hm=4890800b4094b9f5bedb812326a33b304c9a796b43ed3f91dc0b1b27a2708fa2&")
 
         # -------- SEND --------
         await channel.send(f"<@&{MM_ROLE_ID}>")
