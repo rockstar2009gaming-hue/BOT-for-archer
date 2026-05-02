@@ -19,21 +19,19 @@ def run():
     app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
-    t = Thread(target=run)
-    t.start()
+    Thread(target=run).start()
 
 # ─── CONFIG ───────────────────────────────────
 TOKEN = os.environ.get("TOKEN")
 
 FEEDBACK_CHANNEL_ID = 1461396837599543529
-ADMIN_ROLE_ID = 1461388680076722176
 CONFIG_FILE = "config.json"
 
 GUILD_ID = 1461388342968189116
 VOUCH_CHANNEL_ID = 1461391779164323892
 
 MIDDLEMAN_IDS = [
-    1486574884439195690,
+      1486574884439195690,
     1468675859480051928,
     1394312770194767922,
     1196708751827279964,
@@ -52,6 +50,9 @@ MIDDLEMAN_IDS = [
 ]
 
 VOUCHES_FILE = "vouches.json"
+
+# ─── EMBED COLOR (GREY BLUE) ──────────────────
+EMBED_COLOR = 0x5865F2  # discord blurple
 
 # ─── DATA SYSTEM ──────────────────────────────
 def load_vouches():
@@ -132,11 +133,12 @@ async def auto_vouch():
     total = add_vouch(user_id, bot.user.id, "Auto vouch")
 
     embed = discord.Embed(
-        title="✅ Auto Vouch",
-        description=f"{member.mention} got auto-vouched!",
-        color=discord.Color.green()
+        title="⭐ Auto Vouch",
+        color=EMBED_COLOR
     )
-    embed.add_field(name="Total", value=total)
+    embed.add_field(name="User", value=member.mention, inline=False)
+    embed.add_field(name="Total Vouches", value=f"{total} (+1)", inline=True)
+    embed.set_thumbnail(url=member.display_avatar.url)
 
     await channel.send(embed=embed)
 
@@ -152,71 +154,86 @@ async def on_ready():
 
 # ─── COMMANDS ─────────────────────────────────
 
+# ✅ SET VOUCH (FIXED PERMISSION)
 @bot.command()
+@commands.has_permissions(administrator=True)
 async def setvouch(ctx, role: discord.Role = None):
     if not role:
-        return await ctx.send("❌ Mention a role")
-
-    if ADMIN_ROLE_ID not in [r.id for r in ctx.author.roles]:
-        return await ctx.send("❌ No permission")
+        embed = discord.Embed(description="❌ Mention a role", color=EMBED_COLOR)
+        return await ctx.send(embed=embed)
 
     set_vouch_role(role.id)
-    await ctx.send(f"✅ Vouch role set to {role.mention}")
+
+    embed = discord.Embed(
+        description=f"✅ Vouch role set to {role.mention}",
+        color=EMBED_COLOR
+    )
+    await ctx.send(embed=embed)
 
 
+# ✅ VOUCH
 @bot.command()
 async def vouch(ctx, member: discord.Member = None, *, reason=None):
     if not member:
-        return await ctx.send("❌ Mention a user")
+        return await ctx.send(embed=discord.Embed(
+            description="❌ Mention a user", color=EMBED_COLOR))
 
     role_id = get_vouch_role()
     role = ctx.guild.get_role(role_id) if role_id else None
 
     if not role or role not in member.roles:
-        return await ctx.send("❌ User must have vouch role")
+        return await ctx.send(embed=discord.Embed(
+            description="❌ User must have vouch role", color=EMBED_COLOR))
 
     total = add_vouch(member.id, ctx.author.id, reason)
 
-    if total >= 200:
-        rank = "🏆 Elite Middleman"
-    elif total >= 100:
-        rank = "💎 Trusted Middleman"
-    elif total >= 50:
-        rank = "⭐ Verified"
-    else:
-        rank = "🔰 Beginner"
-
-    embed = discord.Embed(title="⭐ New Vouch!", color=discord.Color.gold())
-    embed.add_field(name="Vouched User", value=member.mention, inline=False)
-    embed.add_field(name="Total Vouches", value=f"{total} (+1)", inline=True)
-    embed.add_field(name="Current Rank", value=rank, inline=True)
+    embed = discord.Embed(title="⭐ New Vouch!", color=EMBED_COLOR)
+    embed.add_field(name="User", value=member.mention, inline=False)
+    embed.add_field(name="Total", value=f"{total} (+1)", inline=True)
 
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_footer(text=ctx.guild.name)
 
     await ctx.send(embed=embed)
 
     feedback = bot.get_channel(FEEDBACK_CHANNEL_ID)
     if feedback:
-        await feedback.send(f"📊 {member.mention} now has **{total} vouches**")
+        await feedback.send(embed=discord.Embed(
+            description=f"📊 {member.mention} now has **{total} vouches**",
+            color=EMBED_COLOR
+        ))
 
 
+# ✅ VOUCHES (NOW EMBED)
 @bot.command()
 async def vouches(ctx, member: discord.Member = None):
     member = member or ctx.author
     total = get_vouches(member.id)
-    await ctx.send(f"📊 {member.mention} has **{total} vouches**")
+
+    embed = discord.Embed(
+        title="📊 Vouch Stats",
+        description=f"{member.mention} has **{total} vouches**",
+        color=EMBED_COLOR
+    )
+    await ctx.send(embed=embed)
 
 
+# ✅ HI
 @bot.command()
 async def hi(ctx):
-    await ctx.send(f"👋 Hello {ctx.author.mention}")
+    embed = discord.Embed(
+        description=f"👋 Hello {ctx.author.mention}",
+        color=EMBED_COLOR
+    )
+    await ctx.send(embed=embed)
 
 
+# ✅ DELETE
 @bot.command()
 async def delete(ctx):
     if not ctx.message.reference:
-        return await ctx.send("❌ Reply to a bot message")
+        return await ctx.send(embed=discord.Embed(
+            description="❌ Reply to a bot message",
+            color=EMBED_COLOR))
 
     msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
 
@@ -225,49 +242,19 @@ async def delete(ctx):
         await ctx.message.delete()
 
 
-# ─── DM SYSTEM ────────────────────────────────
-class ConfirmView(discord.ui.View):
-    def __init__(self, role, message, author):
-        super().__init__(timeout=30)
-        self.role = role
-        self.message = message
-        self.author = author
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction, button):
-        if interaction.user != self.author:
-            return await interaction.response.send_message("Not yours", ephemeral=True)
-
-        await interaction.response.send_message("Sending...")
-
-        for m in self.role.members:
-            if m.bot:
-                continue
-            try:
-                await m.send(self.message)
-                await asyncio.sleep(0.3)
-            except:
-                pass
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction, button):
-        await interaction.response.send_message("Cancelled")
-
-@bot.command()
-async def dm(ctx, role: discord.Role = None, *, message=None):
-    if not role or not message:
-        return await ctx.send("Usage: .dm @role message")
-
-    view = ConfirmView(role, message, ctx.author)
-    await ctx.send(f"Send DM to {len(role.members)} users?", view=view)
-
 # ─── ERROR HANDLER ────────────────────────────
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ User not found")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ Missing argument")
+    embed = discord.Embed(color=EMBED_COLOR)
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        embed.description = "❌ Missing argument"
+    elif isinstance(error, commands.MemberNotFound):
+        embed.description = "❌ User not found"
+    elif isinstance(error, commands.MissingPermissions):
+        embed.description = "❌ You need administrator permission"
+
+    await ctx.send(embed=embed)
 
 # ─── RUN ─────────────────────────────────────
 keep_alive()
