@@ -1,6 +1,13 @@
+import discord
+from discord.ext import commands, tasks
+import random
+import json
+import os
+import asyncio
 from flask import Flask
 from threading import Thread
 
+# ─── FLASK KEEP ALIVE ─────────────────────────
 app = Flask('')
 
 @app.route('/')
@@ -15,19 +22,15 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-import discord
-from discord.ext import commands, tasks
-import random
-import json
-import os
-import asyncio
-
-# ─── CONFIG ─────────────────────────────────────────────
+# ─── CONFIG ───────────────────────────────────
 TOKEN = os.environ.get("TOKEN")
+
+FEEDBACK_CHANNEL_ID = 1461396837599543529
+ADMIN_ROLE_ID = 1461388680076722176
+CONFIG_FILE = "config.json"
 
 GUILD_ID = 1461388342968189116
 VOUCH_CHANNEL_ID = 1461391779164323892
-VOUCH_ROLE_ID = 1461400480352567317
 
 MIDDLEMAN_IDS = [
     1486574884439195690,
@@ -37,7 +40,7 @@ MIDDLEMAN_IDS = [
 
 VOUCHES_FILE = "vouches.json"
 
-# ─── DATA SYSTEM ────────────────────────────────────────
+# ─── DATA SYSTEM ──────────────────────────────
 def load_vouches():
     if os.path.exists(VOUCHES_FILE):
         try:
@@ -53,7 +56,6 @@ def save_vouches(data):
 
 def add_vouch(user_id, voucher_id, reason):
     data = load_vouches()
-
     user_id = str(user_id)
 
     if user_id not in data:
@@ -72,14 +74,33 @@ def get_vouches(user_id):
     data = load_vouches()
     return data.get(str(user_id), {}).get("count", 0)
 
-# ─── BOT SETUP ──────────────────────────────────────────
+# ─── CONFIG SAVE SYSTEM ───────────────────────
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def get_vouch_role():
+    return load_config().get("vouch_role")
+
+def set_vouch_role(role_id):
+    data = load_config()
+    data["vouch_role"] = role_id
+    save_config(data)
+
+# ─── BOT SETUP ────────────────────────────────
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix=".", intents=intents)
 
-# ─── AUTO VOUCH ─────────────────────────────────────────
+# ─── AUTO VOUCH ───────────────────────────────
 @tasks.loop(minutes=3)
 async def auto_vouch():
     guild = bot.get_guild(GUILD_ID)
@@ -110,43 +131,68 @@ async def auto_vouch():
 async def before_auto():
     await bot.wait_until_ready()
 
-# ─── EVENTS ─────────────────────────────────────────────
+# ─── EVENTS ───────────────────────────────────
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
     auto_vouch.start()
 
-# ─── COMMANDS ───────────────────────────────────────────
+# ─── COMMANDS ─────────────────────────────────
+
+@bot.command()
+async def setvouch(ctx, role: discord.Role = None):
+    if not role:
+        return await ctx.send("❌ Mention a role")
+
+    if ADMIN_ROLE_ID not in [r.id for r in ctx.author.roles]:
+        return await ctx.send("❌ No permission")
+
+    set_vouch_role(role.id)
+    await ctx.send(f"✅ Vouch role set to {role.mention}")
+
 
 @bot.command()
 async def vouch(ctx, member: discord.Member = None, *, reason=None):
     if not member:
         return await ctx.send("❌ Mention a user")
 
-    role = ctx.guild.get_role(VOUCH_ROLE_ID)
+    role_id = get_vouch_role()
+    role = ctx.guild.get_role(role_id) if role_id else None
 
-    if role not in member.roles:
+    if not role or role not in member.roles:
         return await ctx.send("❌ User must have vouch role")
 
     total = add_vouch(member.id, ctx.author.id, reason)
 
-    embed = discord.Embed(title="✅ Vouch Added", color=discord.Color.green())
-    embed.add_field(name="User", value=member.mention)
-    embed.add_field(name="By", value=ctx.author.mention)
-    embed.add_field(name="Total", value=total)
+    if total >= 200:
+        rank = "🏆 Elite Middleman"
+    elif total >= 100:
+        rank = "💎 Trusted Middleman"
+    elif total >= 50:
+        rank = "⭐ Verified"
+    else:
+        rank = "🔰 Beginner"
 
-    if reason:
-        embed.add_field(name="Reason", value=reason, inline=False)
+    embed = discord.Embed(title="⭐ New Vouch!", color=discord.Color.gold())
+    embed.add_field(name="Vouched User", value=member.mention, inline=False)
+    embed.add_field(name="Total Vouches", value=f"{total} (+1)", inline=True)
+    embed.add_field(name="Current Rank", value=rank, inline=True)
+
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(text=ctx.guild.name)
 
     await ctx.send(embed=embed)
+
+    feedback = bot.get_channel(FEEDBACK_CHANNEL_ID)
+    if feedback:
+        await feedback.send(f"📊 {member.mention} now has **{total} vouches**")
 
 
 @bot.command()
 async def vouches(ctx, member: discord.Member = None):
     member = member or ctx.author
     total = get_vouches(member.id)
-
-    await ctx.send(f"📊 {member.mention} has **{total}** vouches")
+    await ctx.send(f"📊 {member.mention} has **{total} vouches**")
 
 
 @bot.command()
@@ -166,7 +212,7 @@ async def delete(ctx):
         await ctx.message.delete()
 
 
-# ─── DM ROLE SYSTEM ─────────────────────────────────────
+# ─── DM SYSTEM ────────────────────────────────
 class ConfirmView(discord.ui.View):
     def __init__(self, role, message, author):
         super().__init__(timeout=30)
@@ -200,11 +246,9 @@ async def dm(ctx, role: discord.Role = None, *, message=None):
         return await ctx.send("Usage: .dm @role message")
 
     view = ConfirmView(role, message, ctx.author)
-
     await ctx.send(f"Send DM to {len(role.members)} users?", view=view)
 
-
-# ─── ERROR HANDLER ──────────────────────────────────────
+# ─── ERROR HANDLER ────────────────────────────
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MemberNotFound):
@@ -212,6 +256,6 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("❌ Missing argument")
 
-# ─── RUN ────────────────────────────────────────────────
+# ─── RUN ─────────────────────────────────────
 keep_alive()
 bot.run(TOKEN)
